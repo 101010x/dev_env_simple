@@ -1,0 +1,215 @@
+Summary 
+installing Gulp globally to our development machine and locally to our project
+
+configuring tasks using our  gulpfile
+
+copying files using  src  and  dest
+
+linting  - jshint
+transpiling - babel  N.B: Use polyfill after transpiling
+minifying - uglify
+
+running tasks in sequence
+
+using  watch  and  browser-sync  to set up live reload
+
+
+----------------------------------------------------------------------------------------------------
+
+
+npm install babel-cli babel-preset-env --save-dev
+
+Create a file in your project directory called  .babelrc :
+
+{
+  "presets": ["env"]
+}
+
+
+That's the only configuration Babel needs!  Let's ask Babel to transpile  scripts.js  and save the output to  scripts.babel.js :
+
+npx babel scripts.js --out-file scripts.babel.js
+
+
+
+Uh-oh, it seems something went wrong with our Babel transpilation!
+
+It turns out it has to do with our use of async functions, but not to worry, there is a simple solution: the  babel-polyfill .
+
+
+
+All we need to do is add the browser version of the  babel-polyfill  to our  index.html  to allow our async functions to work properly. Add the following line to  index.html :
+
+<script src="./node_modules/babel-polyfill/browser.js"></script>
+
+Now if you retest our app, everything should be functioning properly!
+
+
+According to gulpjs.com, "Gulp is a toolkit for automating painful or time-consuming tasks in your development workflow, so you can stop messing around and build something."
+
+npm install -g gulp-cli
+npm install --save-dev gulp
+
+
+Create a new file called  gulpfile.js  in your project directory. At the top of the file, add the line:
+
+const gulp = require('gulp');
+This Node syntax gives us access to Gulp methods throughout the rest of the file.
+
+Gulp task configuration is all done with JavaScript code. Let's create our first task:
+
+gulp.task('test-task', () => {
+    
+});
+We use Gulp's  task  function to create a new task. The first argument we pass is the name we want to give our task. The second argument is the function which contains the steps for that task.
+
+Processing our HTML
+Generally, a task will take some source files and copy them to our build location (often with some modification such as minification or concatenation). Let's now build a simple task which takes all HTML files in our project directory and copies them to a dist  folder.
+
+A folder called dist is often used as a build folder, with "dist" being short for "distributable." 
+
+Let's rename  test-task  from the previous section to  processHTML :
+
+gulp.task('processHTML', () => {
+
+});
+Next, we will use Gulp's  src  function to select our input files — in this case, our HTML files:
+
+gulp.task('processHTML', () => {
+  gulp.src('index.html')
+});
+Finally, we will use the  pipe  and  dest  functions to set the destination for our copied files:
+
+gulp.task('processHTML', () => {
+  gulp.src('*.html')
+    .pipe(gulp.dest('dist'));
+});
+Now, from the command line, you can run:
+
+gulp processHTML
+If all goes well, you should now have a  dist  folder with a copy of  index.html  in it. Congratulations, you have just begun to create your first build process!
+
+Processing our JavaScript
+Copying the file
+Let's start by simply setting up a copy task for our  scripts.js  in the same way we did for  index.html .  We will add other steps to this task as we advance.
+
+gulp.task('processJS', () => {
+  gulp.src('*.js')
+    .pipe(gulp.dest('dist'));
+});
+You can now run:
+
+gulp processJS
+
+Linting our code
+The first step we will add to our  processJS  task is linting, to verify code quality. For this, we will need to install two new development dependencies:
+
+npm install --save-dev jshint gulp-jshint
+To use JSHint in our build, we first need to require it in our  gulpfile :
+
+const jshint = require('gulp-jshint');
+Now we can add a step to our  processJS  task. In fact, we need to add two steps: the first to initialize JSHint and tell it to lint for ES6; the second to tell JSHint which reporter to use to show any linting errors.
+
+gulp.task('processJS', () => {
+  gulp.src('*.js')
+    .pipe(jshint({
+        esversion: 6
+    }))
+    .pipe(jshint.reporter('default'))
+    .pipe(gulp.dest('dist'));
+});
+It is worth noting that, at time of publication, JSHint does not account for async/await. However, it is set to do so at next release.
+
+
+We can add a final step to our processJS task which will minify our JavaScript code. Start by installing the dependency:
+
+npm install --save-dev gulp-uglify
+…importing it to our  gulpfile :
+
+const uglify = require('gulp-uglify');
+…and adding it as a step in our task:
+
+gulp.task('processJS', () => {
+  gulp.src('scripts.js')
+    .pipe(jshint({
+      esversion: 6
+    }))
+    .pipe(jshint.reporter('default'))
+    .pipe(babel({
+      presets: ['env']
+    }))
+    .pipe(uglify())
+    .pipe(gulp.dest('dist'));
+});
+Now all of our tasks do what we want them to do, but executing them one by one and by hand sort of defeats the process of automation.  Let's look at a way of getting Gulp to run all of these tasks automatically!
+
+
+We will install a new dependency for this:
+
+npm install --save-dev run-sequence
+Require it in our  gulpfile :
+
+const runSequence = require('run-sequence');
+Now we shall create our gulp default task, or the task that is run when simply typing "gulp" at the command line. The  run-sequence  syntax is a little different:
+
+gulp.task('default', (callback) => {
+  runSequence(['processHTML', 'processJS', 'babelPolyfill'], callback);
+});
+For it to function properly, you need to pass  callback  as an argument to the task function, and pass it as the final argument to  runSequence .  The first argument is an array containing the tasks we wish to accomplish. Tasks passed to  runSequence  are run in the order in which they are passed; any tasks passed in an array are run in parallel. In this case, we are safe to do so, as our three tasks are independent: no task relies on the output of any other. This, of course, improves performance.
+
+Now, if you simply run:
+
+gulp
+…your project will build correctly!
+
+Watching our files
+Another huge advantage to using Gulp for development is its capacity to watch for file changes. Every time we save a file, we can have Gulp run a task: for example, when modifications are made to a JavaScript file, we can run  processJS .  For HTML files, we would want to run  processHTML .  Let's set that up now.
+
+Let's create a new task called  watch :
+
+gulp.task('watch', () => {
+    
+});
+We are now going to use  gulp.watch(filesToWatch, [tasksToRun])  to set up our watchers:
+
+gulp.task('watch', () => {
+  gulp.watch('*.js', ['processJS']);
+  gulp.watch('*.html', ['processHTML']);
+});
+We can now add our  watch  task to the end of our build:
+
+gulp.task('default', (callback) => {
+  runSequence(['processHTML', 'processJS', 'babelPolyfill'], 'watch', callback);
+});
+Now, if you run  gulp  from the command line, make a modification to a file, and then save that file, you should see Gulp run the corresponding task!
+
+Live reload
+The final step we will cover is using Gulp to automatically run and refresh our browser window every time we modify our code, so that we can see the changes we make in real time.  For this purpose, we will install a new dependency:
+
+npm install --save-dev browser-sync
+To import  browser-sync  in our  gulpfile , the syntax is slightly different:
+
+const browserSync = require('browser-sync').create();
+Now we need to create a task which initializes  browser-sync  to set up our development server based on our production files:
+
+gulp.task('browserSync', () => {
+  browserSync.init({
+    server: './dist',
+    port: 8080,
+    ui: {
+      port: 8081
+    }
+  });
+});
+All that's left is to integrate the  browserSync  task into our  watch  task. We pass it as an argument to the task function to make sure it is executed first, and we add watchers to our  dist  folder which will run  browserSync.reload  on every file change:
+
+gulp.task('watch', ['browserSync'], () => {
+  gulp.watch('*.js', ['processJS']);
+  gulp.watch('*.html', ['processHTML']);
+
+  gulp.watch('dist/*.js', browserSync.reload);
+  gulp.watch('dist/*.html', browserSync.reload);
+});
+Now try running  gulp  from the command line to see it in action.
+
+Congratulations!  You now have a working build with live reload thanks to Gulp!
